@@ -1,0 +1,91 @@
+@import "tailwindcss";
+
+/* ── NexaStore Design Tokens ────────────────────────────────── */
+:root {
+  --white:   #FFFFFF;
+  --slate:   #1D1D1F;
+  --gold:    #D4AF37;
+  --gold-dim: #a88a1c;
+  --dark:    #0a0a0c;
+  --dark-2:  #111114;
+  --dark-3:  #18181c;
+  --orange:  #F97316;
+  --glass:   rgba(255,255,255,0.06);
+  --glass-border: rgba(212,175,55,0.18);
+}
+
+@theme inline {
+  --color-white:   var(--white);
+  --color-slate:   var(--slate);
+  --color-gold:    var(--gold);
+  --color-dark:    var(--dark);
+  --color-orange:  var(--orange);
+  --color-background: var(--white);
+  --color-foreground: var(--slate);
+  --font-cairo:    var(--font-cairo);
+}
+
+/* ── Base Reset ─────────────────────────────────────────────── */
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html {
+  background: var(--white);
+  color: var(--slate);
+  direction: rtl;
+  scroll-behavior: smooth;
+}
+
+body {
+  font-family: var(--font-cairo), 'Cairo', 'Segoe UI', system-ui, sans-serif;
+  background: var(--white);
+  color: var(--slate);
+  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* ── Scrollbar ─────────────────────────────────────────────── */
+::-webkit-scrollbar { width: 6px; }
+::-webkit-scrollbar-track { background: var(--dark); }
+::-webkit-scrollbar-thumb { background: var(--gold-dim); border-radius: 3px; }
+
+/* ── Gold Glow Helper ──────────────────────────────────────── */
+.glow-gold {
+  text-shadow: 0 0 18px rgba(212, 175, 55, 0.55), 0 0 40px rgba(212, 175, 55, 0.25);
+}
+.glow-orange {
+  text-shadow: 0 0 18px rgba(249, 115, 22, 0.55), 0 0 40px rgba(249, 115, 22, 0.25);
+}
+
+/* ── Glass Card ────────────────────────────────────────────── */
+.glass-card {
+  background: var(--glass);
+  border: 1px solid var(--glass-border);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+}
+
+/* ── Sonar Ring Keyframes ──────────────────────────────────── */
+@keyframes sonar-ring {
+  0%   { transform: scale(0.4); opacity: 0.8; }
+  100% { transform: scale(2.2); opacity: 0; }
+}
+@keyframes sonar-sweep {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
+}
+@keyframes float-in {
+  from { opacity: 0; transform: translateY(12px) scale(0.9); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+/* ── License Gate Spinner ──────────────────────────────────── */
+@keyframes nexaSpin {
+  to { transform: rotate(360deg); }
+}
