@@ -4,6 +4,7 @@ export interface IProduct extends Document {
   name:      string
   category:  string
   price:     number
+  costPrice: number
   stock:     number
   specs?:    string
   imageUrl?: string
@@ -17,6 +18,7 @@ const ProductSchema = new Schema<IProduct>(
     name:     { type: String, required: true,  trim: true },
     category: { type: String, required: true,  trim: true, default: 'موبايلات' },
     price:    { type: Number, required: true,  min: 0 },
+    costPrice: { type: Number, required: true,  min: 0, default: 0 },
     stock:    { type: Number, required: true,  min: 0, default: 0 },
     specs:    { type: String, required: false, trim: true, default: '' },
     imageUrl: { type: String, required: false, trim: true, default: '' },

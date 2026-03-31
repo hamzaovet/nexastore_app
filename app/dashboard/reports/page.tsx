@@ -21,6 +21,13 @@ type ApiSale = {
   total: number
 }
 
+type ApiExpense = {
+  _id: string
+  title: string
+  amount: number
+  date: string
+}
+
 type ProductStat = {
   name: string
   category: string
@@ -32,6 +39,14 @@ type ProductStat = {
 export default function ReportsPage() {
   const [products, setProducts]     = useState<ApiProduct[]>([])
   const [sales, setSales]           = useState<ApiSale[]>([])
+  const [expenses, setExpenses]     = useState<ApiExpense[]>([])
+  const [stats, setStats]           = useState({
+    totalRevenue: 0,
+    totalCost: 0,
+    totalExpenses: 0,
+    netProfit: 0,
+    totalInventoryValue: 0
+  })
   const [loading, setLoading]       = useState(true)
   const [mounted, setMounted]       = useState(false)
   const [lastRefresh, setLastRefresh] = useState(new Date())
@@ -40,13 +55,22 @@ export default function ReportsPage() {
   async function fetchAll() {
     setLoading(true)
     try {
-      const [pRes, sRes] = await Promise.all([
+      const [pRes, sRes, eRes, stRes] = await Promise.all([
         fetch('/api/products'),
         fetch('/api/sales'),
+        fetch('/api/expenses'),
+        fetch('/api/stats'),
       ])
-      const [pData, sData] = await Promise.all([pRes.json(), sRes.json()])
+      const [pData, sData, eData, stData] = await Promise.all([
+        pRes.json(), 
+        sRes.json(), 
+        eRes.json(), 
+        stRes.json()
+      ])
       setProducts(pData.products ?? [])
       setSales(sData.sales ?? [])
+      setExpenses(eData.expenses ?? [])
+      if (stData.success) setStats(stData.stats)
       setLastRefresh(new Date())
     } catch (err) {
       console.error('[Reports] fetch error', err)
@@ -61,7 +85,6 @@ export default function ReportsPage() {
   }, [])
 
   /* ── Derived stats (computed from real data) ──────────────── */
-  const totalRevenue = sales.reduce((s, e) => s + (e.total ?? e.price * e.qty), 0)
   const totalUnits   = sales.reduce((s, e) => s + e.qty, 0)
   const lowStock     = products.filter((p) => p.stock <= LOW_STOCK_THRESHOLD)
 
@@ -136,53 +159,51 @@ export default function ReportsPage() {
                 </div>
               </div>
               <p style={{ fontSize: '1.6rem', fontWeight: 900, color: '#D4AF37', direction: 'ltr', letterSpacing: '-0.02em' }}>
-                {totalRevenue.toLocaleString('ar-EG')}
+                {stats.totalRevenue.toLocaleString('ar-EG')}
               </p>
-              <p style={{ fontSize: '0.75rem', color: 'rgba(255,255,255,0.35)', marginTop: '0.25rem' }}>ج.م إجمالي</p>
+              <p style={{ fontSize: '0.75rem', color: 'rgba(255,255,255,0.35)', marginTop: '0.25rem' }}>ج.م</p>
             </div>
 
-            {/* إجمالي المبيعات */}
-            <div style={{ ...card, background: 'linear-gradient(135deg, #0f0c2e, #1a1650)', border: '1px solid rgba(99,102,241,0.2)' }}>
+            {/* إجمالي المصاريف */}
+            <div style={{ ...card, background: 'linear-gradient(135deg, #1a0a0a, #2e0c0c)', border: '1px solid rgba(239,68,68,0.2)' }}>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1rem' }}>
-                <p style={{ fontSize: '0.78rem', fontWeight: 700, color: 'rgba(255,255,255,0.55)', letterSpacing: '0.05em' }}>إجمالي المبيعات</p>
-                <div style={{ width: 36, height: 36, borderRadius: 10, background: 'rgba(99,102,241,0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                  <ShoppingBag size={18} color="#818cf8" strokeWidth={2} />
+                <p style={{ fontSize: '0.78rem', fontWeight: 700, color: 'rgba(255,255,255,0.55)', letterSpacing: '0.05em' }}>إجمالي المصاريف</p>
+                <div style={{ width: 36, height: 36, borderRadius: 10, background: 'rgba(239,68,68,0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <ShoppingBag size={18} color="#ef4444" strokeWidth={2} />
                 </div>
               </div>
-              <p style={{ fontSize: '1.6rem', fontWeight: 900, color: '#818cf8', direction: 'ltr', letterSpacing: '-0.02em' }}>
-                {totalUnits.toLocaleString('ar-EG')}
+              <p style={{ fontSize: '1.6rem', fontWeight: 900, color: '#ef4444', direction: 'ltr', letterSpacing: '-0.02em' }}>
+                {stats.totalExpenses.toLocaleString('ar-EG')}
               </p>
-              <p style={{ fontSize: '0.75rem', color: 'rgba(255,255,255,0.35)', marginTop: '0.25rem' }}>وحدة مباعة</p>
+              <p style={{ fontSize: '0.75rem', color: 'rgba(255,255,255,0.35)', marginTop: '0.25rem' }}>ج.م</p>
             </div>
 
-            {/* تنبيهات المخزون */}
-            <div style={{ ...card, background: lowStock.length > 0 ? 'linear-gradient(135deg, #2d1200, #3d1a00)' : '#fff', border: `1px solid ${lowStock.length > 0 ? 'rgba(245,158,11,0.3)' : 'rgba(29,29,31,0.06)'}` }}>
+            {/* صافي الربح */}
+            <div style={{ ...card, background: 'linear-gradient(135deg, #0a1a0a, #0c2e0c)', border: '1px solid rgba(34,197,94,0.2)' }}>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1rem' }}>
-                <p style={{ fontSize: '0.78rem', fontWeight: 700, color: lowStock.length > 0 ? 'rgba(255,255,255,0.55)' : 'rgba(29,29,31,0.5)', letterSpacing: '0.05em' }}>تنبيهات المخزون</p>
-                <div style={{ width: 36, height: 36, borderRadius: 10, background: 'rgba(245,158,11,0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                  <AlertTriangle size={18} color="#f59e0b" strokeWidth={2} />
-                </div>
-              </div>
-              <p style={{ fontSize: '1.6rem', fontWeight: 900, color: '#f59e0b', direction: 'ltr', letterSpacing: '-0.02em' }}>
-                {lowStock.length}
-              </p>
-              <p style={{ fontSize: '0.75rem', color: lowStock.length > 0 ? 'rgba(255,255,255,0.35)' : 'rgba(29,29,31,0.4)', marginTop: '0.25rem' }}>
-                منتج تحت {LOW_STOCK_THRESHOLD} وحدات
-              </p>
-            </div>
-
-            {/* متوسط قيمة الوحدة */}
-            <div style={card}>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1rem' }}>
-                <p style={{ fontSize: '0.78rem', fontWeight: 700, color: 'rgba(29,29,31,0.5)', letterSpacing: '0.05em' }}>متوسط قيمة الطلب</p>
-                <div style={{ width: 36, height: 36, borderRadius: 10, background: 'rgba(34,197,94,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <p style={{ fontSize: '0.78rem', fontWeight: 700, color: 'rgba(255,255,255,0.55)', letterSpacing: '0.05em' }}>صافي الربح</p>
+                <div style={{ width: 36, height: 36, borderRadius: 10, background: 'rgba(34,197,94,0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                   <BarChart3 size={18} color="#22c55e" strokeWidth={2} />
                 </div>
               </div>
-              <p style={{ fontSize: '1.6rem', fontWeight: 900, color: '#16a34a', direction: 'ltr', letterSpacing: '-0.02em' }}>
-                {totalUnits > 0 ? Math.round(totalRevenue / totalUnits).toLocaleString('ar-EG') : 0}
+              <p style={{ fontSize: '1.6rem', fontWeight: 900, color: '#22c55e', direction: 'ltr', letterSpacing: '-0.02em' }}>
+                {stats.netProfit.toLocaleString('ar-EG')}
               </p>
-              <p style={{ fontSize: '0.75rem', color: 'rgba(29,29,31,0.4)', marginTop: '0.25rem' }}>ج.م / وحدة</p>
+              <p style={{ fontSize: '0.75rem', color: 'rgba(255,255,255,0.35)', marginTop: '0.25rem' }}>ج.م صافي</p>
+            </div>
+
+            {/* قيمة المخزون */}
+            <div style={{ ...card, background: 'linear-gradient(135deg, #1a1206, #3d2a00)', border: '1px solid rgba(212,175,55,0.3)' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1rem' }}>
+                <p style={{ fontSize: '0.78rem', fontWeight: 700, color: 'rgba(255,255,255,0.55)', letterSpacing: '0.05em' }}>قيمة المخزون</p>
+                <div style={{ width: 36, height: 36, borderRadius: 10, background: 'rgba(212,175,55,0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <RefreshCw size={18} color="#D4AF37" strokeWidth={2} />
+                </div>
+              </div>
+              <p style={{ fontSize: '1.6rem', fontWeight: 900, color: '#D4AF37', direction: 'ltr', letterSpacing: '-0.02em' }}>
+                {stats.totalInventoryValue.toLocaleString('ar-EG')}
+              </p>
+              <p style={{ fontSize: '0.75rem', color: 'rgba(255,255,255,0.35)', marginTop: '0.25rem' }}>ج.م تكلفة</p>
             </div>
           </div>
 
@@ -260,6 +281,39 @@ export default function ReportsPage() {
                       </tr>
                     )
                   })}
+                </tbody>
+              </table>
+            )}
+          </div>
+
+          {/* Recent Expenses Table */}
+          <div style={{ ...card, overflowX: 'auto', marginTop: '2rem' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '1.5rem' }}>
+              <div style={{ width: 36, height: 36, borderRadius: 10, background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <ShoppingBag size={18} color="#ef4444" />
+              </div>
+              <h2 style={{ fontWeight: 800, fontSize: '1.05rem', color: '#1D1D1F' }}>سجل المصاريف الأخيرة</h2>
+            </div>
+
+            {expenses.length === 0 ? (
+              <div style={{ textAlign: 'center', padding: '2.5rem', color: 'rgba(29,29,31,0.35)' }}>لا توجد مصاريف مسجلة</div>
+            ) : (
+              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.9rem' }}>
+                <thead>
+                  <tr style={{ borderBottom: '2px solid rgba(239,68,68,0.12)' }}>
+                    {['المصروف', 'المبلغ', 'التاريخ'].map((h) => (
+                      <th key={h} style={{ padding: '0.75rem 1rem', textAlign: 'right', fontWeight: 700, color: 'rgba(29,29,31,0.45)', fontSize: '0.76rem' }}>{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {expenses.map((e) => (
+                    <tr key={e._id} style={{ borderBottom: '1px solid rgba(29,29,31,0.05)' }}>
+                      <td style={{ padding: '1rem', fontWeight: 700, color: '#1D1D1F' }}>{e.title}</td>
+                      <td style={{ padding: '1rem', fontWeight: 700, color: '#ef4444', direction: 'ltr' }}>{e.amount.toLocaleString('ar-EG')} ج.م</td>
+                      <td style={{ padding: '1rem', color: 'rgba(29,29,31,0.45)', direction: 'ltr' }}>{e.date}</td>
+                    </tr>
+                  ))}
                 </tbody>
               </table>
             )}

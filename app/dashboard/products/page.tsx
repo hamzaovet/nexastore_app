@@ -11,6 +11,7 @@ type Product = {
   name: string
   category: string
   price: number
+  costPrice: number
   stock: number
   specs?: string
   imageUrl?: string
@@ -23,6 +24,7 @@ type FormState = {
   name:     string
   category: string
   price:    string
+  costPrice: string
   stock:    string
   specs:    string
   badge:    string
@@ -34,6 +36,7 @@ const blankForm: FormState = {
   name:     '',
   category: 'موبايلات',
   price:    '',
+  costPrice: '',
   stock:    '',
   specs:    '',
   badge:    '',
@@ -97,8 +100,9 @@ export default function ProductsPage() {
       _id:      p._id      ?? '',
       name:     p.name     ?? '',
       category: p.category ?? 'موبايلات',
-      price:    String(p.price  ?? ''),
-      stock:    String(p.stock  ?? ''),
+      price:    String(p.price     ?? ''),
+      costPrice: String(p.costPrice ?? ''),
+      stock:    String(p.stock     ?? ''),
       specs:    p.specs    ?? '',
       badge:    p.badge    ?? '',
       imageUrl: p.imageUrl ?? '',
@@ -145,6 +149,7 @@ export default function ProductsPage() {
           name:     form.name.trim(),
           category: form.category,
           price:    Number(form.price),
+          costPrice: Number(form.costPrice),
           stock:    Number(form.stock),
           specs:    form.specs.trim(),
           badge:    form.badge.trim(),
@@ -168,6 +173,7 @@ export default function ProductsPage() {
           name:     form.name.trim(),
           category: form.category,
           price:    Number(form.price),
+          costPrice: Number(form.costPrice),
           stock:    Number(form.stock),
           specs:    form.specs.trim()    || undefined,
           badge:    form.badge.trim()    || undefined,
@@ -387,6 +393,18 @@ export default function ProductsPage() {
                   placeholder="0"
                   value={form.price}
                   onChange={(e) => setForm({ ...form, price: e.target.value })}
+                  style={inp}
+                />
+              </>)}
+
+              {/* سعر التكلفة */}
+              {field(<>
+                <label style={lbl}>سعر التكلفة (ج.م) *</label>
+                <input
+                  type="number"
+                  placeholder="0"
+                  value={form.costPrice}
+                  onChange={(e) => setForm({ ...form, costPrice: e.target.value })}
                   style={inp}
                 />
               </>)}

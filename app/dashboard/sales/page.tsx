@@ -16,10 +16,12 @@ type Sale = {
   customer: string
   phone: string
   date: string
+  productId?: string
   productName: string
   price: number
   qty: number
   total: number
+  status?: 'completed' | 'returned'
 }
 
 export default function SalesPage() {
@@ -36,7 +38,13 @@ export default function SalesPage() {
     date:      new Date().toISOString().split('T')[0],
     productId: '',
     qty:       '1',
+    actualSalePrice: '',
   })
+
+  // Expense Modal State
+  const [expenseModal, setExpenseModal] = useState(false)
+  const [expenseForm, setExpenseForm]   = useState({ title: '', amount: '' })
+  const [addingExpense, setAddingExpense] = useState(false)
 
   /* ── Data fetching ──────────────────────────────────────── */
   useEffect(() => { fetchSales();  fetchProducts() }, [])
@@ -61,8 +69,14 @@ export default function SalesPage() {
       const data = await res.json()
       const list: ApiProduct[] = data.products ?? []
       setProducts(list)
-      // Pre-select first product
-      if (list.length > 0) setForm((f) => ({ ...f, productId: list[0]._id }))
+      // Pre-select first product and set its price as default actual sale price
+      if (list.length > 0) {
+        setForm((f) => ({ 
+          ...f, 
+          productId: list[0]._id,
+          actualSalePrice: String(list[0].price)
+        }))
+      }
     } catch {
       showToast('فشل تحميل المنتجات', 'err')
     } finally {
@@ -77,7 +91,8 @@ export default function SalesPage() {
   }
 
   const selectedProduct = products.find((p) => p._id === form.productId)
-  const totalRevenue    = sales.reduce((s, e) => s + (e.total ?? e.price * e.qty), 0)
+  // حساب الإيرادات يتجاهل المردودات
+  const totalRevenue    = sales.filter(s => s.status !== 'returned').reduce((s, e) => s + (e?.total ?? (e?.price * e?.qty) ?? 0), 0)
 
   /* ── Submit sale → POST /api/sales ──────────────────────── */
   async function handleSubmit(e: React.FormEvent) {
@@ -95,6 +110,7 @@ export default function SalesPage() {
           productId:   selectedProduct._id,
           productName: selectedProduct.name,
           price:       selectedProduct.price,
+          actualSalePrice: Number(form.actualSalePrice),
           qty:         Number(form.qty),
         }),
       })
@@ -102,8 +118,15 @@ export default function SalesPage() {
       if (!res.ok) throw new Error(data.error)
 
       // Prepend new sale & reset form
-      setSales((prev) => [data.sale, ...prev])
-      setForm({ customer: '', phone: '', date: new Date().toISOString().split('T')[0], productId: products[0]?._id ?? '', qty: '1' })
+      setSales((prev) => [data.data, ...prev])
+      setForm({ 
+        customer: '', 
+        phone: '', 
+        date: new Date().toISOString().split('T')[0], 
+        productId: products[0]?._id ?? '', 
+        qty: '1',
+        actualSalePrice: String(products[0]?.price ?? '')
+      })
 
       // Reflect stock decrement locally so the preview stays accurate
       setProducts((prev) =>
@@ -118,6 +141,57 @@ export default function SalesPage() {
       showToast(err instanceof Error ? err.message : 'حدث خطأ', 'err')
     } finally {
       setSubmitting(false)
+    }
+  }
+
+  /* ── Add Expense ───────────────────────────────────────── */
+  async function handleAddExpense(e: React.FormEvent) {
+    e.preventDefault()
+    if (!expenseForm.title || !expenseForm.amount) return
+    setAddingExpense(true)
+    try {
+      const res = await fetch('/api/expenses', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          title: expenseForm.title,
+          amount: Number(expenseForm.amount),
+          date: new Date().toISOString().split('T')[0],
+        }),
+      })
+      if (!res.ok) throw new Error('فشل إضافة المصروف')
+      showToast('✓ تم إضافة المصروف بنجاح', 'ok')
+      setExpenseModal(false)
+      setExpenseForm({ title: '', amount: '' })
+    } catch (err) {
+      showToast('حدث خطأ أثناء إضافة المصروف', 'err')
+    } finally {
+      setAddingExpense(false)
+    }
+  }
+
+  /* ── Return/Delete Sale ───────────────────────────────── */
+  async function handleReturnSale(saleId: string, productId: string | undefined, qty: number) {
+    if (!confirm('هل أنت متأكد من استرجاع هذه البيعة كـ (مردودات مبيعات)؟')) return;
+    try {
+      const res = await fetch(`/api/sales/${saleId}`, { method: 'PUT' });
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}));
+        throw new Error(errData.message || 'فشل الاسترجاع');
+      }
+
+      // Update UI: Mark as returned and restore stock
+      setSales((prev) => prev.map(s => s._id === saleId ? { ...s, status: 'returned' } : s));
+      if (productId) {
+        setProducts((prev) =>
+          prev.map((p) =>
+            p._id === productId ? { ...p, stock: p.stock + qty } : p
+          )
+        );
+      }
+      showToast('✓ تم تسجيل مردودات المبيعات بنجاح', 'ok');
+    } catch (err: unknown) {
+      showToast(err instanceof Error ? err.message : 'حدث خطأ', 'err');
     }
   }
 
@@ -147,20 +221,29 @@ export default function SalesPage() {
       )}
 
       {/* Header */}
-      <div style={{ marginBottom: '2rem' }}>
-        <p style={{ fontSize: '0.72rem', fontWeight: 700, letterSpacing: '0.2em', color: '#D4AF37', textTransform: 'uppercase', marginBottom: '0.3rem' }}>إدارة المبيعات</p>
-        <h1 style={{ fontSize: '1.65rem', fontWeight: 900, color: '#1D1D1F' }}>سجل المبيعات</h1>
-        <p style={{ color: 'rgba(29,29,31,0.5)', fontSize: '0.88rem', marginTop: '0.2rem' }}>
-          تسجيل البيع يخصم الكمية تلقائياً من المخزون
-        </p>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1rem', marginBottom: '2rem' }}>
+        <div>
+          <p style={{ fontSize: '0.72rem', fontWeight: 700, letterSpacing: '0.2em', color: '#D4AF37', textTransform: 'uppercase', marginBottom: '0.3rem' }}>إدارة المبيعات</p>
+          <h1 style={{ fontSize: '1.65rem', fontWeight: 900, color: '#1D1D1F' }}>سجل المبيعات</h1>
+          <p style={{ color: 'rgba(29,29,31,0.5)', fontSize: '0.88rem', marginTop: '0.2rem' }}>
+            تسجيل البيع يخصم الكمية تلقائياً من المخزون
+          </p>
+        </div>
+        <button 
+          onClick={() => setExpenseModal(true)}
+          style={{ background: '#1D1D1F', color: '#fff', border: 'none', borderRadius: 12, padding: '0.7rem 1.4rem', fontWeight: 700, fontSize: '0.9rem', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.6rem', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }}
+        >
+          <Plus size={18} />
+          إضافة مصروف
+        </button>
       </div>
 
       {/* KPIs — derived from real sales state */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(170px,1fr))', gap: '1rem', marginBottom: '2rem' }}>
         {[
           { label: 'إجمالي الإيرادات', value: `${totalRevenue.toLocaleString('ar-EG')} ج.م`, color: '#D4AF37' },
-          { label: 'عدد العمليات',     value: `${sales.length} عملية`,                                       color: '#6366f1' },
-          { label: 'وحدات مباعة',      value: `${sales.reduce((s, e) => s + e.qty, 0)} وحدة`,                color: '#22c55e' },
+          { label: 'عدد العمليات',     value: `${sales.filter(s => s.status !== 'returned').length} عملية`,                                      color: '#6366f1' },
+          { label: 'وحدات مباعة',      value: `${sales.filter(s => s.status !== 'returned').reduce((s, e) => s + e.qty, 0)} وحدة`,                 color: '#22c55e' },
         ].map((k) => (
           <div key={k.label} style={{ ...card, padding: '1.2rem 1.4rem' }}>
             <p style={{ fontSize: '0.74rem', fontWeight: 600, color: 'rgba(29,29,31,0.45)', marginBottom: '0.4rem' }}>{k.label}</p>
@@ -185,6 +268,7 @@ export default function SalesPage() {
               { label: 'اسم العميل', key: 'customer', type: 'text',   placeholder: 'أحمد محمد' },
               { label: 'رقم الهاتف', key: 'phone',    type: 'tel',    placeholder: '010xxxxxxxx' },
               { label: 'التاريخ',    key: 'date',     type: 'date',   placeholder: '' },
+              { label: 'سعر البيع الفعلي (ج.م)', key: 'actualSalePrice', type: 'number', placeholder: '0' },
               { label: 'الكمية',     key: 'qty',      type: 'number', placeholder: '1' },
             ].map((f) => (
               <div key={f.key}>
@@ -213,7 +297,14 @@ export default function SalesPage() {
                   لا توجد منتجات — أضف منتجاً أولاً
                 </div>
               ) : (
-                <select value={form.productId} onChange={(e) => setForm({ ...form, productId: e.target.value })} style={inp}>
+                <select 
+                  value={form.productId} 
+                  onChange={(e) => {
+                    const p = products.find(prod => prod._id === e.target.value)
+                    setForm({ ...form, productId: e.target.value, actualSalePrice: String(p?.price ?? '') })
+                  }} 
+                  style={inp}
+                >
                   {products.map((p) => (
                     <option key={p._id} value={p._id}>
                       {p.name} — {p.price.toLocaleString('ar-EG')} ج.م
@@ -265,24 +356,38 @@ export default function SalesPage() {
             <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.88rem' }}>
               <thead>
                 <tr style={{ borderBottom: '2px solid rgba(212,175,55,0.12)' }}>
-                  {['العميل', 'الهاتف', 'المنتج', 'القيمة', 'الكمية', 'التاريخ'].map((h) => (
-                    <th key={h} style={{ padding: '0.7rem 0.85rem', textAlign: 'right', fontWeight: 700, color: 'rgba(29,29,31,0.45)', fontSize: '0.74rem', whiteSpace: 'nowrap' }}>{h}</th>
+                  {['العميل', 'الهاتف', 'المنتج', 'القيمة', 'الكمية', 'التاريخ', 'إجراء'].map((h) => (
+                    <th key={h} style={{ padding: '0.7rem 0.85rem', textAlign: h === 'إجراء' ? 'center' : 'right', fontWeight: 700, color: 'rgba(29,29,31,0.45)', fontSize: '0.74rem', whiteSpace: 'nowrap' }}>{h}</th>
                   ))}
                 </tr>
               </thead>
               <tbody>
                 {sales.map((s) => (
-                  <tr key={s._id} style={{ borderBottom: '1px solid rgba(29,29,31,0.05)' }}
+                  <tr key={s._id} style={{ borderBottom: '1px solid rgba(29,29,31,0.05)', opacity: s.status === 'returned' ? 0.5 : 1 }}
                     onMouseEnter={(e) => ((e.currentTarget as HTMLTableRowElement).style.background = '#fafafa')}
                     onMouseLeave={(e) => ((e.currentTarget as HTMLTableRowElement).style.background = 'transparent')}>
                     <td style={{ padding: '0.85rem', fontWeight: 700, color: '#1D1D1F' }}>{s.customer}</td>
                     <td style={{ padding: '0.85rem', color: 'rgba(29,29,31,0.55)', direction: 'ltr', textAlign: 'right' }}>{s.phone}</td>
                     <td style={{ padding: '0.85rem', color: 'rgba(29,29,31,0.7)' }}>{s.productName}</td>
-                    <td style={{ padding: '0.85rem', fontWeight: 700, color: '#D4AF37', direction: 'ltr', whiteSpace: 'nowrap' }}>
-                      {(s.total ?? s.price * s.qty).toLocaleString('ar-EG')} ج.م
+                    <td style={{ padding: '0.85rem', fontWeight: 700, color: s.status === 'returned' ? '#dc2626' : '#D4AF37', direction: 'ltr', whiteSpace: 'nowrap' }}>
+                      {s.status === 'returned' ? <strike>{(s.total ?? s.price * s.qty).toLocaleString('ar-EG')}</strike> : (s.total ?? s.price * s.qty).toLocaleString('ar-EG')} ج.م
                     </td>
                     <td style={{ padding: '0.85rem', color: 'rgba(29,29,31,0.6)', textAlign: 'center' }}>{s.qty}</td>
                     <td style={{ padding: '0.85rem', color: 'rgba(29,29,31,0.45)', direction: 'ltr', whiteSpace: 'nowrap' }}>{s.date}</td>
+                    <td style={{ padding: '0.85rem', textAlign: 'center' }}>
+                      {s.status === 'returned' ? (
+                        <span style={{ color: '#dc2626', fontWeight: 'bold', fontSize: '0.75rem' }}>مردودات</span>
+                      ) : (
+                        <button 
+                          onClick={() => handleReturnSale(s._id, s.productId, s.qty)}
+                          style={{ background: '#dc2626', color: '#fff', border: 'none', borderRadius: 6, padding: '0.4rem 0.8rem', fontSize: '0.75rem', fontWeight: 700, cursor: 'pointer' }}
+                          onMouseOver={(e) => e.currentTarget.style.opacity = '0.8'}
+                          onMouseOut={(e) => e.currentTarget.style.opacity = '1'}
+                        >
+                          استرجاع
+                        </button>
+                      )}
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -290,6 +395,31 @@ export default function SalesPage() {
           )}
         </div>
       </div>
+
+      {/* ── Add Expense Modal ─────────────────────────────── */}
+      {expenseModal && (
+        <div style={{ position: 'fixed', inset: 0, zIndex: 200, background: 'rgba(0,0,0,0.55)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1rem' }}>
+          <div style={{ background: '#fff', borderRadius: 20, width: '100%', maxWidth: 400, padding: '2rem', boxShadow: '0 32px 80px rgba(0,0,0,0.25)' }}>
+            <h2 style={{ fontWeight: 900, fontSize: '1.2rem', color: '#1D1D1F', marginBottom: '1.5rem' }}>إضافة مصروف جديد</h2>
+            <form onSubmit={handleAddExpense} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+              <div>
+                <label style={lbl}>بيان المصروف</label>
+                <input required type="text" placeholder="مثلاً: إيجار، كهرباء، شحن..." value={expenseForm.title} onChange={(e) => setExpenseForm({ ...expenseForm, title: e.target.value })} style={inp} />
+              </div>
+              <div>
+                <label style={lbl}>المبلغ (ج.م)</label>
+                <input required type="number" placeholder="0" value={expenseForm.amount} onChange={(e) => setExpenseForm({ ...expenseForm, amount: e.target.value })} style={inp} />
+              </div>
+              <div style={{ display: 'flex', gap: '0.75rem', marginTop: '1rem' }}>
+                <button type="submit" disabled={addingExpense} style={{ flex: 1, background: '#D4AF37', color: '#fff', border: 'none', borderRadius: 12, padding: '0.8rem', fontWeight: 700, cursor: addingExpense ? 'not-allowed' : 'pointer' }}>
+                  {addingExpense ? 'جارٍ الحفظ...' : 'حفظ'}
+                </button>
+                <button type="button" onClick={() => setExpenseModal(false)} style={{ flex: 1, background: 'rgba(29,29,31,0.06)', color: '#1D1D1F', border: 'none', borderRadius: 12, padding: '0.8rem', fontWeight: 600 }}>إلغاء</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
 
       <style>{`@keyframes spin { to { transform: rotate(360deg) } }`}</style>
     </div>

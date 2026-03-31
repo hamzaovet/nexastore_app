@@ -1,4 +1,5 @@
 import { NextRequest } from 'next/server'
+import { cookies } from 'next/headers'
 import { connectDB } from '@/lib/db'
 import Product from '@/models/Product'
 
@@ -19,7 +20,16 @@ export async function GET() {
   try {
     await connectDB()
     const products = await Product.find({}).sort({ createdAt: -1 }).lean()
-    return Response.json({ success: true, products })
+
+    const cookieStore = await cookies()
+    const isAuth      = cookieStore.get('almaz_auth')
+
+    // Strip costPrice if not authenticated
+    const sanitizedProducts = isAuth
+      ? products
+      : products.map(({ costPrice, ...rest }) => rest)
+
+    return Response.json({ success: true, products: sanitizedProducts })
   } catch (error) {
     const msg = error instanceof Error ? error.message : String(error)
     console.error('[GET /api/products]', msg)

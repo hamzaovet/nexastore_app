@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react'
 import { motion } from 'framer-motion'
 import {
   TrendingUp, ShoppingCart, Users, Package,
-  Loader2, Link as LinkIcon,
+  Loader2, Link as LinkIcon, RotateCcw
 } from 'lucide-react'
 import Link from 'next/link'
 
@@ -27,15 +27,17 @@ type ApiSale = {
   price: number
   qty: number
   total: number
+  status?: 'completed' | 'returned'
 }
 
-/* ─── Status badge helper (all sales are 'مكتمل' from our API) ─ */
+/* ─── Status badge helper ───────────────────────────────── */
 function StatusBadge({ status }: { status: string }) {
   const map: Record<string, { bg: string; color: string }> = {
     مكتمل:        { bg: 'rgba(34,197,94,0.1)',   color: '#22c55e' },
     'قيد التوصيل': { bg: 'rgba(99,102,241,0.1)',  color: '#6366f1' },
     معلق:         { bg: 'rgba(212,175,55,0.1)',   color: '#D4AF37' },
     ملغي:         { bg: 'rgba(239,68,68,0.1)',    color: '#ef4444' },
+    مرتجع:        { bg: 'rgba(239,68,68,0.12)',   color: '#dc2626' }, // ضفنا المرتجع هنا
   }
   const s = map[status] ?? { bg: '#eee', color: '#555' }
   return (
@@ -78,16 +80,30 @@ export default function DashboardPage() {
     fetchAll()
   }, [])
 
+  /* ── Derived stats from real data ────────────────────── */
+  const [statsData, setStatsData] = useState({
+    totalRevenue: 0,
+    totalReturns: 0, // ضفنا المردودات هنا
+    totalCost: 0,
+    totalExpenses: 0,
+    netProfit: 0,
+    totalInventoryValue: 0
+  })
+
   async function fetchAll() {
     setLoading(true)
     try {
-      const [pRes, sRes] = await Promise.all([
+      const [pRes, sRes, stRes] = await Promise.all([
         fetch('/api/products'),
         fetch('/api/sales'),
+        fetch('/api/stats'),
       ])
-      const [pData, sData] = await Promise.all([pRes.json(), sRes.json()])
+      const [pData, sData, stData] = await Promise.all([pRes.json(), sRes.json(), stRes.json()])
       setProducts(pData.products ?? [])
       setSales(sData.sales ?? [])
+      if (stData.success) {
+        setStatsData(stData.stats)
+      }
     } catch (err) {
       console.error('[Dashboard] fetch error', err)
     } finally {
@@ -95,49 +111,60 @@ export default function DashboardPage() {
     }
   }
 
-  /* ── Derived stats from real data ────────────────────── */
-  const totalRevenue   = sales.reduce((s, e) => s + (e.total ?? e.price * e.qty), 0)
-  const totalOrders    = sales.length
-  const totalProducts  = products.length
-  // Unique customers by phone number
-  const uniqueCustomers = new Set(sales.map((s) => s.phone)).size
-
   const stats = [
     {
       id: 'revenue',
-      label: 'إجمالي الإيرادات',
-      value: loading ? '—' : totalRevenue.toLocaleString('ar-EG'),
+      label: 'الإيرادات (مبيعات سليمة)',
+      value: loading ? '—' : statsData.totalRevenue.toLocaleString('ar-EG'),
       unit: 'ج.م',
       icon: TrendingUp,
       color: '#D4AF37',
       bg: 'rgba(212,175,55,0.08)',
     },
     {
-      id: 'orders',
-      label: 'إجمالي المبيعات',
-      value: loading ? '—' : String(totalOrders),
-      unit: 'عملية',
+      id: 'returns',
+      label: 'مردودات المبيعات',
+      value: loading ? '—' : statsData.totalReturns.toLocaleString('ar-EG'),
+      unit: 'ج.م',
+      icon: RotateCcw,
+      color: '#ef4444',
+      bg: 'rgba(239,68,68,0.08)',
+    },
+    {
+      id: 'cost',
+      label: 'التكاليف (مبيعات سليمة)',
+      value: loading ? '—' : statsData.totalCost.toLocaleString('ar-EG'),
+      unit: 'ج.م',
       icon: ShoppingCart,
       color: '#6366f1',
       bg: 'rgba(99,102,241,0.08)',
     },
     {
-      id: 'customers',
-      label: 'العملاء (فريد)',
-      value: loading ? '—' : String(uniqueCustomers),
-      unit: 'عميل',
+      id: 'expenses',
+      label: 'المصاريف التشغيلية',
+      value: loading ? '—' : statsData.totalExpenses.toLocaleString('ar-EG'),
+      unit: 'ج.م',
       icon: Users,
+      color: '#f97316',
+      bg: 'rgba(249,115,22,0.08)',
+    },
+    {
+      id: 'profit',
+      label: 'صافي الربح',
+      value: loading ? '—' : statsData.netProfit.toLocaleString('ar-EG'),
+      unit: 'ج.م',
+      icon: TrendingUp,
       color: '#22c55e',
       bg: 'rgba(34,197,94,0.08)',
     },
     {
-      id: 'products',
-      label: 'المنتجات المتاحة',
-      value: loading ? '—' : String(totalProducts),
-      unit: 'منتج',
+      id: 'inventory',
+      label: 'قيمة المخزون الحالي',
+      value: loading ? '—' : statsData.totalInventoryValue.toLocaleString('ar-EG'),
+      unit: 'ج.م',
       icon: Package,
-      color: '#F97316',
-      bg: 'rgba(249,115,22,0.08)',
+      color: '#8b5cf6',
+      bg: 'rgba(139,92,246,0.08)',
     },
   ]
 
@@ -162,7 +189,7 @@ export default function DashboardPage() {
       {/* Stats Grid */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '1.25rem' }}>
         {loading
-          ? Array.from({ length: 4 }).map((_, i) => <SkeletonCard key={i} />)
+          ? Array.from({ length: 6 }).map((_, i) => <SkeletonCard key={i} />)
           : stats.map((s, i) => {
               const Icon = s.icon
               return (
@@ -260,36 +287,39 @@ export default function DashboardPage() {
                 </tr>
               </thead>
               <tbody>
-                {recentOrders.map((sale, i) => (
-                  <tr
-                    key={sale._id}
-                    style={{ borderTop: '1px solid rgba(29,29,31,0.05)', transition: 'background 0.2s' }}
-                    onMouseEnter={(e) => ((e.currentTarget as HTMLTableRowElement).style.background = '#FAFAFA')}
-                    onMouseLeave={(e) => ((e.currentTarget as HTMLTableRowElement).style.background = 'transparent')}
-                  >
-                    <td style={{ padding: '1rem 1.5rem', fontSize: '0.8rem', fontWeight: 700, color: '#D4AF37', whiteSpace: 'nowrap', direction: 'ltr' }}>
-                      #{String(i + 1).padStart(4, '0')}
-                    </td>
-                    <td style={{ padding: '1rem 1.5rem', fontSize: '0.9rem', fontWeight: 600, color: '#1D1D1F', whiteSpace: 'nowrap' }}>
-                      {sale.customer}
-                    </td>
-                    <td style={{ padding: '1rem 1.5rem', fontSize: '0.88rem', color: 'rgba(29,29,31,0.65)', whiteSpace: 'nowrap' }}>
-                      {sale.productName}
-                    </td>
-                    <td style={{ padding: '1rem 1.5rem', fontSize: '0.9rem', fontWeight: 800, color: '#1D1D1F', whiteSpace: 'nowrap', direction: 'ltr' }}>
-                      {(sale.total ?? sale.price * sale.qty).toLocaleString('ar-EG')} ج.م
-                    </td>
-                    <td style={{ padding: '1rem 1.5rem', fontSize: '0.88rem', color: 'rgba(29,29,31,0.6)', textAlign: 'center' }}>
-                      {sale.qty}
-                    </td>
-                    <td style={{ padding: '1rem 1.5rem', whiteSpace: 'nowrap' }}>
-                      <StatusBadge status="مكتمل" />
-                    </td>
-                    <td style={{ padding: '1rem 1.5rem', fontSize: '0.85rem', color: 'rgba(29,29,31,0.45)', whiteSpace: 'nowrap', direction: 'ltr' }}>
-                      {sale.date}
-                    </td>
-                  </tr>
-                ))}
+                {recentOrders.map((sale, i) => {
+                  const isReturned = sale.status === 'returned';
+                  return (
+                    <tr
+                      key={sale._id}
+                      style={{ borderTop: '1px solid rgba(29,29,31,0.05)', transition: 'background 0.2s', opacity: isReturned ? 0.6 : 1 }}
+                      onMouseEnter={(e) => ((e.currentTarget as HTMLTableRowElement).style.background = '#FAFAFA')}
+                      onMouseLeave={(e) => ((e.currentTarget as HTMLTableRowElement).style.background = 'transparent')}
+                    >
+                      <td style={{ padding: '1rem 1.5rem', fontSize: '0.8rem', fontWeight: 700, color: isReturned ? 'rgba(29,29,31,0.4)' : '#D4AF37', whiteSpace: 'nowrap', direction: 'ltr' }}>
+                        #{String(i + 1).padStart(4, '0')}
+                      </td>
+                      <td style={{ padding: '1rem 1.5rem', fontSize: '0.9rem', fontWeight: 600, color: '#1D1D1F', whiteSpace: 'nowrap' }}>
+                        {sale.customer}
+                      </td>
+                      <td style={{ padding: '1rem 1.5rem', fontSize: '0.88rem', color: 'rgba(29,29,31,0.65)', whiteSpace: 'nowrap' }}>
+                        {sale.productName}
+                      </td>
+                      <td style={{ padding: '1rem 1.5rem', fontSize: '0.9rem', fontWeight: 800, color: isReturned ? '#dc2626' : '#1D1D1F', whiteSpace: 'nowrap', direction: 'ltr' }}>
+                        {isReturned ? <strike>{(sale.total ?? sale.price * sale.qty).toLocaleString('ar-EG')}</strike> : (sale.total ?? sale.price * sale.qty).toLocaleString('ar-EG')} ج.م
+                      </td>
+                      <td style={{ padding: '1rem 1.5rem', fontSize: '0.88rem', color: 'rgba(29,29,31,0.6)', textAlign: 'center' }}>
+                        {sale.qty}
+                      </td>
+                      <td style={{ padding: '1rem 1.5rem', whiteSpace: 'nowrap' }}>
+                        <StatusBadge status={isReturned ? 'مرتجع' : 'مكتمل'} />
+                      </td>
+                      <td style={{ padding: '1rem 1.5rem', fontSize: '0.85rem', color: 'rgba(29,29,31,0.45)', whiteSpace: 'nowrap', direction: 'ltr' }}>
+                        {sale.date}
+                      </td>
+                    </tr>
+                  )
+                })}
               </tbody>
             </table>
           </div>
